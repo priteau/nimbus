@@ -1,8 +1,10 @@
 from commands import getstatusoutput
 import os
+import socket
 import string
 from propagate_adapter import PropagationAdapter
 from workspacecontrol.api.exceptions import *
+import workspacecontrol.main.wc_args as wc_args
 
 class propadapter(PropagationAdapter):
         
@@ -87,7 +89,6 @@ class propadapter(PropagationAdapter):
         return self._get_remote_command(local, remote, False)
         
     def _get_remote_command(self, local, remote, push):
-                
         # 'remote' arg is a URL like "scp://host:port/path"
         # scp instead needs: host -P port remote local
         #       (or if push: host -P port local remote)
@@ -151,6 +152,17 @@ class propadapter(PropagationAdapter):
         self.c.log.debug("SCP user %s, host %s, port %d, path %s" 
                   % (xfer_user, xfer_host, xfer_port, xfer_path))
 
+        grouptransferid_arg = self.p.get_arg_or_none(wc_args.GROUP_TRANSFER_ID)
+        if grouptransferid_arg:
+            hostname = socket.gethostname()
+            cmd = "ssh" + " -p %d " % xfer_port
+            if xfer_user:
+                cmd+= xfer_user + "@"
+
+            cmd += xfer_host + ' '
+            cmd += "/home/rennes/priteau/control_populate.sh %s %s %s %s" % (grouptransferid_arg, xfer_path, hostname, local)
+            return cmd
+
         cmd = self.scp + " -P %d " % xfer_port
 
         if push:
@@ -170,5 +182,3 @@ class propadapter(PropagationAdapter):
             cmd +=  ' ' + local
 
         return cmd
-        
-        

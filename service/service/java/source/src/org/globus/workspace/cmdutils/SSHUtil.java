@@ -44,9 +44,6 @@ public class SSHUtil {
     }
 
     public static void setSshaccount(String acct) {
-        if (account != null) {
-            return;
-        }
         if (acct != null && acct.trim().length() == 0) {
             return;
         }

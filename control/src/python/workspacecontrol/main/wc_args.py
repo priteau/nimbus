@@ -69,6 +69,10 @@ DRYRUN = ControlArg("dryrun", None, createarg=False, noval=True)
 DRYRUN.help = "Do as little as possible 'for real', will still affect filesystem, for example logs and information persistence"
 a.append(DRYRUN)
 
+GROUP_TRANSFER_ID = ControlArg("group-transfer-id", None)
+GROUP_TRANSFER_ID.help = "Group transfer ID for cluster deployment"
+a.append(GROUP_TRANSFER_ID)
+
 KERNEL = ControlArg("kernel", "-k", metavar="FILENAME (not path)")
 KERNEL.help = "Override the configured kernel"
 a.append(KERNEL)

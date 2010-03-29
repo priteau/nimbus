@@ -23,10 +23,13 @@ import org.globus.workspace.ErrorUtil;
 import org.globus.workspace.Lager;
 import org.globus.workspace.LockManager;
 import org.globus.workspace.ProgrammingError;
+import org.globus.workspace.ReturnException;
 import org.globus.workspace.WorkspaceConstants;
+import org.globus.workspace.WorkspaceException;
 import org.globus.workspace.WorkspaceUtil;
 import org.globus.workspace.network.AssociationAdapter;
 import org.globus.workspace.accounting.AccountingEventAdapter;
+import org.globus.workspace.cmdutils.SSHUtil;
 import org.globus.workspace.creation.Creation;
 import org.globus.workspace.persistence.DataConvert;
 import org.globus.workspace.persistence.PersistenceAdapter;
@@ -44,6 +47,7 @@ import org.globus.workspace.service.binding.BindingAdapter;
 import org.globus.workspace.service.binding.GlobalPolicies;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
 import org.globus.workspace.service.binding.vm.VirtualMachineDeployment;
+import org.globus.workspace.service.binding.vm.VirtualMachinePartition;
 import org.globus.workspace.service.binding.vm.CustomizationNeed;
 
 import org.nimbustools.api._repr._CreateResult;
@@ -69,7 +73,10 @@ import org.nimbustools.api.services.rm.ManageException;
 
 import org.safehaus.uuid.UUIDGenerator;
 
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.text.DateFormat;
 
 import commonj.timers.TimerManager;
@@ -682,7 +689,9 @@ public class DefaultCreation implements Creation {
                    CreationException,
                    MetadataException,
                    ResourceRequestDeniedException,
-                   SchedulingException {
+                   ReturnException,
+                   SchedulingException,
+                   WorkspaceException {
 
         // todo: check assumptions (guard against misuse by object extenders)
 
@@ -723,6 +732,64 @@ public class DefaultCreation implements Creation {
         result.setCoscheduledID(coschedID);
         result.setGroupID(groupID);
         final VM[] createdVMs = new VM[ids.length];
+
+        if (bindings.length > 1 && bindings[0].isPropagateRequired()) {
+            for (int i = 0; i < bindings.length; i++) {
+                bindings[i].setGroupTransferID(groupID);
+            }
+
+            VirtualMachinePartition rootdisk = null;
+
+            // results to send:
+            final ArrayList images = new ArrayList();
+            final ArrayList imagemounts = new ArrayList();
+
+            final VirtualMachinePartition[] partitions = bindings[0].getPartitions();
+
+            if (partitions == null || partitions.length == 0) {
+                final String err = "should be at least one partition, Binding " +
+                    "should have caught at the outset";
+                logger.error(err);
+                throw new WorkspaceException(err);
+            } else {
+                for (int i = 0; i < partitions.length; i++) {
+                    if (partitions[i].isRootdisk()) {
+                        rootdisk = partitions[i];
+                        break;
+                    }
+                }
+            }
+
+            String repository_node = null;
+            if (rootdisk != null) {
+                final String rootImageURI = rootdisk.getImage();
+                Pattern hostPattern = Pattern.compile("scp://([^/]*)");
+                Matcher m = hostPattern.matcher(rootImageURI);
+                while (m.find()) {
+                    repository_node = m.group(1);
+                }
+            }
+            System.out.println("REPO: " + repository_node);
+
+            final String name = "ClusterPropagate";
+            SSHUtil.setSshaccount("globus");
+            if (repository_node != null) {
+                final ArrayList ssh = SSHUtil.constructSshCommand(repository_node);
+                final ArrayList exe = new ArrayList(8);
+                // Probably no need for 2 ArrayList
+                exe.add("/home/rennes/priteau/cluster_propagate.sh");
+                exe.add("-n " + bindings.length);
+                exe.add("-u " + groupID);
+
+                ssh.addAll(exe);
+                final String[] send = (String[]) ssh.toArray(new String[ssh.size()]);
+                WorkspaceUtil.runCommand(send, true, true);
+                SSHUtil.setSshaccount("nimbus");
+            } else {
+                throw new WorkspaceException("no repository_node in request " +
+                        "context, can not " + name);
+            }
+        }
 
         int bailed = -1;
         Throwable failure = null;

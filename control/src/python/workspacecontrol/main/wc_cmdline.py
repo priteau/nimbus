@@ -75,4 +75,3 @@ if __name__ == "__main__":
         sys.stderr.write("\nExiting with error code: %d\n\n" % exitcode)
     sys.stderr.flush()
     sys.exit(exitcode)
-    
