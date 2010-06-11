@@ -35,6 +35,7 @@ class DefaultImageEditing:
         self.sudo_path = None
         self.mounttool_path = None
         self.fdisk_path = None
+        self.xm_path = None
         self.mountdir = None
         self.tmpdir = None
         
@@ -46,6 +47,10 @@ class DefaultImageEditing:
         self.fdisk_path = self.p.get_conf_or_none("mount", "fdisk")
         if not self.fdisk_path:
             self.c.log.warn("no fdisk configuration, mount+edit functionality for HD images is disabled")
+
+        self.xm_path = self.p.get_conf_or_none("mount", "xm")
+        if not self.xm_path:
+            self.c.log.warn("no xm configuration, mount+edit functionality for QCOW images is disabled")
             
         # if functionality is disabled but arg exists, should fail program
         self._validate_args_if_exist()
@@ -413,8 +418,17 @@ class DefaultImageEditing:
     def _doOneMountCopyTask(self, imagepath, src, dst, mntpath, hdimage):
 
         if not hdimage:
-            cmd = "%s %s one %s %s %s %s" % (self.sudo_path, self.mounttool_path, imagepath, mntpath, src, dst)
-            error = self._doOneMountCopyInnerTask(src, cmd)
+            f = open(imagepath, 'r')
+            magic = f.read(3)
+            f.close()
+            if magic == 'QFI' and self.xm_path:
+                # Mounting the partition as a QCOW image
+                cmd = "%s %s qcowone %s %s %s %s" % (self.sudo_path, self.mounttool_path, imagepath, mntpath, src, dst)
+                error = self._doOneMountCopyInnerTask(src, cmd)
+            else:
+                cmd = "%s %s one %s %s %s %s" % (self.sudo_path, self.mounttool_path, imagepath, mntpath, src, dst)
+                error = self._doOneMountCopyInnerTask(src, cmd)
+
             if error:
                 raise error
             else:

@@ -167,7 +167,9 @@ class Disk:
             # file is ignored at the moment
             if self.driver == "tap:aio":
                 x.write(L(3, "<driver name='tap' type='aio' />"))
-        
+            if self.driver == "tap:qcow":
+                x.write(L(3, "<driver name='tap' type='qcow' />"))
+
         if self._type == "block":
             x.write(L(3, "<source dev='%s' />" % self.source))
         else:

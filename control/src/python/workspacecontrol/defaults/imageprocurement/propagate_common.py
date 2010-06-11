@@ -14,6 +14,7 @@ from propagate_adapter import PropagationAdapter
 
 # keywords for 'adapters' dict as well as the expected URL schemes
 PROP_ADAPTER_SCP = "scp"
+PROP_ADAPTER_QCOW = "qcow"
 PROP_ADAPTER_GUC = "gsiftp"
 PROP_ADAPTER_HDFS = "hdfs"
 PROP_ADAPTER_HTTP = "http"
@@ -64,7 +65,18 @@ class DefaultImageProcurement:
                 msg = "SCP configuration present (propagation->scp) but cannot load a suitable SCP implementation in the code"
                 self.c.log.exception(msg + ": ")
                 raise InvalidConfig(msg)
-            
+
+        qcow_create_path = self.p.get_conf_or_none("propagation", "qcow_create")
+        if qcow_create_path:
+            try:
+                import propagate_qcow
+                self.adapters[PROP_ADAPTER_QCOW] = propagate_qcow.propadapter(self.p, self.c)
+            except:
+                msg = "QCOW configuration present (propagation->qcow_create) but cannot load a suitable QCOW implementation in the code"
+                self.c.log.exception(msg + ": ")
+                raise InvalidConfig(msg)
+
+
         guc_path = self.p.get_conf_or_none("propagation", "guc")
         if guc_path:
             try:
@@ -339,7 +351,7 @@ class DefaultImageProcurement:
             raise InvalidInput("The %s argument is required." % wc_args.NAME.long_syntax)
         vm_securedir = os.path.join(self.securelocaldir, vm_name)
         return vm_securedir
-        
+
     # --------------------------------------------------------------------------
     # IMPLs for actual actions the module takes
     # --------------------------------------------------------------------------
@@ -716,7 +728,10 @@ class DefaultImageProcurement:
                 # object is returned by the module, it is assumed to exist
                 lf.path = self._derive_instance_dir()
                 lf.path = os.path.join(lf.path, local_filename)
-                    
+
+                if keyword == PROP_ADAPTER_QCOW:
+                    adapter.backing_image = os.path.join(self.localdir, local_filename)
+
                 pathexists = os.path.exists(lf.path)
                 if pathexists and lf._propagate_needed:
                     raise InvalidInput("file is going to be transferred to this host but the target exists already: '%s'" % lf.path)
@@ -771,4 +786,3 @@ class DefaultImageProcurement:
                 old = lf._unpropagation_target
                 lf._unpropagation_target = unproptargets[counter]
                 self.c.log.debug("old unpropagation target '%s' is now '%s'" % (old, lf._unpropagation_target))
-

@@ -34,11 +34,11 @@ class intakeadapter(PlatformInputAdapter):
         dom.on_reboot = self.p.get_conf_or_none("xencreation", "on_reboot")
         dom.on_crash = self.p.get_conf_or_none("xencreation", "on_crash")
         
-        # values: "tap:aio" or "file".  If None, assume file
+        # values: "tap:aio", "tap:qcow" or "file".  If None, assume file
         driver = self.p.get_conf_or_none("xencreation", "disk_driver")
         if not driver:
             driver = "file"
-        if driver != "tap:aio" and driver != "file":
+        if driver != "tap:aio" and driver != "tap:qcow" and driver != "file":
             raise InvalidConfig("unknown xen disk driver value: %s" % driver)
         for disk in dom.devices.disks:
             disk.driver = driver

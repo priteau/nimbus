@@ -75,7 +75,7 @@ set -f -e -u -C -p -P
 #     instead. By default, Bash follows the logical chain of directories
 #     when performing commands which change the current directory.
 
-PATH=/bin
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
 SHELL=/bin/bash
 export PATH SHELL
 
@@ -87,6 +87,7 @@ function strlen (){
 MOUNT="/bin/mount"
 UMOUNT="/bin/umount"
 CP="/bin/cp"
+XM="/usr/sbin/xm"
 
 FLOCKFILE=/opt/nimbus/var/workspace-control/lock/loopback.lock
 FLOCK=/usr/bin/flock
@@ -151,6 +152,8 @@ elif [ "$subcommand" = "one" ]; then
   subcommand="ONE"
 elif [ "$subcommand" = "hdone" ]; then
   subcommand="HDONE"
+elif [ "$subcommand" = "qcowone" ]; then
+  subcommand="QCOWONE"
 else
   echo "invalid subcommand"
   exit 1
@@ -191,6 +194,17 @@ elif [ "$subcommand" = "HDONE" ]; then
   sourcefiles="$datafile"
   targetfiles="$datatarget"
   
+elif [ "$subcommand" = "QCOWONE" ]; then
+  if [ $# -ne 5 ]; then
+    echo "qcowone subcommand requires 5 and only 5 arguments: one <imagefile> <mntpoint> <datafile> <datatarget>"
+    exit 1
+  fi
+  echo "  - datafile: $datafile"
+  echo "  - datatarget: $datatarget"
+
+  sourcefiles="$datafile"
+  targetfiles="$datatarget"
+
 else
   echo "??"
   exit 64
@@ -317,10 +331,47 @@ echo ""
 echo "Altering image (dryrun = $DRYRUN):"
 echo ""
 
+if [ ! -f $imagefile ]; then
+  echo "*** can not find image file $imagefile, exiting"
+  exit 1
+fi
+
+if [ "$subcommand" = "QCOWONE" ]; then
+  cmd="$XM block-attach 0 tap:qcow:$imagefile /dev/xvda1 w 0"
+
+  echo "command = $cmd"
+  if [ "$DRYRUN" != "true" ]; then
+    ( $cmd )
+    if [ $? -ne 0 ]; then
+      # xm will print to stderr
+      exit 5
+    else
+      echo "  - successful"
+    fi
+  fi
+fi
+
+# Loop for 30 seconds waiting for xvda1 to show up
+if [ "$subcommand" = "QCOWONE" ]; then
+  i=30
+  while [ $i -ne 0 ]; do
+    ls /dev/xvda1 > /dev/null 2>&1 && break
+    i=`expr $i - 1`
+    echo "No /dev/xvda1 yet, will try again for $i seconds"
+    sleep 1
+  done
+  if ! ls /dev/xvda1 > /dev/null 2>&1; then
+    echo "Waited 30 seconds but no /dev/xvda1 showed up, exiting"
+    exit 66
+  fi
+fi
+
 if [ "$subcommand" = "ONE" ]; then
   cmd="$MOUNT -o loop,noexec,nosuid,nodev,noatime,sync $imagefile $mountpoint"
 elif [ "$subcommand" = "HDONE" ]; then
   cmd="$MOUNT -o loop,noexec,nosuid,nodev,noatime,sync,offset=$offsetint $imagefile $mountpoint"
+elif [ "$subcommand" = "QCOWONE" ]; then
+  cmd="$MOUNT /dev/xvda1 $mountpoint"
 else
   echo "??"
   exit 65
@@ -342,6 +393,8 @@ problem="false"
 if [ "$subcommand" = "ONE" ]; then
   cmd="$CP $datafile $mountpoint/$datatarget"
 elif [ "$subcommand" = "HDONE" ]; then
+  cmd="$CP $datafile $mountpoint/$datatarget"
+elif [ "$subcommand" = "QCOWONE" ]; then
   cmd="$CP $datafile $mountpoint/$datatarget"
 else
   echo "??"
@@ -371,6 +424,21 @@ if [ "$DRYRUN" != "true" ]; then
     # notify that one or more CP invocations did not succeed:
     if [ "$problem" = "true" ]; then
       exit 7
+    fi
+  fi
+fi
+
+if [ "$subcommand" = "QCOWONE" ]; then
+  cmd="$XM block-detach 0 `xm block-list 0 | awk '/^[0-9]/ { print \$1; }'`"
+
+  echo "command = $cmd"
+  if [ "$DRYRUN" != "true" ]; then
+    ( $cmd )
+    if [ $? -ne 0 ]; then
+      # xm will print to stderr
+      exit 5
+    else
+      echo "  - successful"
     fi
   fi
 fi
