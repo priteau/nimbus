@@ -763,7 +763,7 @@ public class DefaultCreation implements Creation {
             String repository_node = null;
             if (rootdisk != null) {
                 final String rootImageURI = rootdisk.getImage();
-                Pattern hostPattern = Pattern.compile("scp://([^/]*)");
+                Pattern hostPattern = Pattern.compile("cumulus://([^/:]*)");
                 Matcher m = hostPattern.matcher(rootImageURI);
                 while (m.find()) {
                     repository_node = m.group(1);
@@ -772,7 +772,6 @@ public class DefaultCreation implements Creation {
             System.out.println("REPO: " + repository_node);
 
             final String name = "ClusterPropagate";
-            SSHUtil.setSshaccount("globus");
             if (repository_node != null) {
                 final ArrayList ssh = SSHUtil.constructSshCommand(repository_node);
                 final ArrayList exe = new ArrayList(8);
@@ -784,7 +783,6 @@ public class DefaultCreation implements Creation {
                 ssh.addAll(exe);
                 final String[] send = (String[]) ssh.toArray(new String[ssh.size()]);
                 WorkspaceUtil.runCommand(send, true, true);
-                SSHUtil.setSshaccount("nimbus");
             } else {
                 throw new WorkspaceException("no repository_node in request " +
                         "context, can not " + name);
