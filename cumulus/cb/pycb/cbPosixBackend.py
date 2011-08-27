@@ -111,6 +111,8 @@ class cbPosixData(object):
         self.access = access
 
         self.seek_count = 0
+        self._max_read_len = None
+        self._read_so_far = 0
 
         if not openIt:
             return
@@ -193,11 +195,18 @@ class cbPosixData(object):
         return self.file.next()
 
     def read(self, size=None):
-        if size == None:
-            st = self.file.read(self.blockSize)
-        else:
-            st = self.file.read(size)
+
+        if not size:
+            size = self.blockSize
+
+        if self._max_read_len:
+            remaining = self._max_read_len - self._read_so_far + 1
+            if remaining < size:
+                size = remaining
+
+        st = self.file.read(size)
         self.md5er.update(st)
+        self._read_so_far = self._read_so_far + len(st)
         return st
 
 #    def readline(self, size=None):
@@ -222,6 +231,12 @@ class cbPosixData(object):
     def writelines(self, seq):
         for s in seq:
             self.write(s)
-        
 
+    def set_read_partial(self, offset, length):
+        """This is an experimental function.
+        Other backends should raise an exception when this is called.
+        This should be called once and at the beggining only"""
 
+        # first seek to this offset.
+        self.file.seek(offset, os.SEEK_SET)
+        self._max_read_len = length

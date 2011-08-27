@@ -19,6 +19,7 @@ from twisted.protocols.basic import FileSender
 from twisted.python.log import err
 import twisted.web.http
 from pynimbusauthz.user import User
+import re
 
 
 #
@@ -93,6 +94,7 @@ def parse_acl_request(xml):
 class cbRequest(object):
 
     def __init__(self, request, user, requestId, bucketIface):
+        self.partial_range = None
         self.bucketName = None
         self.objectName = None
         self.request = request
@@ -438,7 +440,10 @@ class cbGetObject(cbRequest):
                 etag = self.calcMd5Sum(dataObj)
                 dataObj.set_md5(etag)
             self.setHeader(self.request, 'ETag', '"%s"' % (etag))
-            self.setResponseCode(self.request, 200, 'OK')
+            if self.partial_range:
+                self.setResponseCode(self.request, 206, 'Partial Content')
+            else:
+                self.setResponseCode(self.request, 200, 'OK')
 
             fp = dataObj
             d = FileSender().beginFileTransfer(fp, self.request)
@@ -467,6 +472,22 @@ class cbGetObject(cbRequest):
         self.setHeader(request, 'Content-Length', str(dataObj.get_size()))
 
         (s,ct,self.etag) = self.user.get_info(self.bucketName, self.objectName)
+
+        self.partial_range = self.request.getHeader('Range')
+        if self.partial_range:
+            c = re.compile('(bytes=)(.*?)-(.*)')
+            m = c.match(self.partial_range)
+            start_ndx = int(m.group(2))
+            if m.group(3):
+                max_bytes = int(m.group(3))
+            else:
+                max_bytes = None
+            dataObj.set_read_partial(start_ndx, max_bytes)
+            if max_bytes:
+                self.setHeader(request, 'Content-Length', max_bytes + 1)
+            else:
+                self.setHeader(request, 'Content-Length',
+                               dataObj.get_size() - start_ndx)
 
         reactor.callInThread(self.sendFile, dataObj)
 
